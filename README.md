@@ -457,7 +457,7 @@ To load the LADSPA module at system startup for all users include settings in `/
 
 	.ifexists module-ladspa-sink.so
 	.nofail
-	load-module module-ladspa-sink sink_name=ladspa_out master=<master_sink> plugin=ladspa_dsp label=ladspa_dsp
+	load-module module-ladspa-sink sink_name=ladspa_out master=<master_sink> plugin=<plugin name> label=<plugin label>
 	.fail
 	.endif
 
@@ -468,7 +468,7 @@ To load the LADSPA module at user login include settings in `~/.config/pulse/def
 	.include /etc/pulse/default.pa
 	.ifexists module-ladspa-sink.so
 	.nofail
-	load-module module-ladspa-sink sink_name=ladspa_out master=<master_sink> plugin=ladspa_dsp label=ladspa_dsp
+	load-module module-ladspa-sink sink_name=ladspa_out master=<master_sink> plugin=<plugin name> label=<plugin label>
 	.fail
 	.endif
 
