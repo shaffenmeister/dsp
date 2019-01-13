@@ -1,4 +1,4 @@
-.TH DSP 1 dsp\-1.5
+.TH DSP 1 dsp\-1.6
 .SH NAME
 dsp \- an audio processing program with an interactive mode
 .SH SYNOPSIS
@@ -95,6 +95,29 @@ is reopened. This mode is most useful when the output is an audio device, but
 can also be used to concatenate inputs with different sample rates and/or
 numbers of channels into a single output file when used with the \fBresample\fR
 and/or \fBremix\fR effects.
+.SS Signal generator
+The \fBsgen\fR input type is a basic (for now, at least) signal generator that can
+generate impulses and exponential sine sweeps. The syntax for the \fIpath\fR
+argument is as follows:
+.PP
+[\fItype\fR[@\fIchannel_selector\fR][:\fIarg\fR[=\fIvalue\fR]...]][/\fItype\fR...][+\fIlen\fR[\fBs\fR|\fBm\fR|\fBS\fR]]
+.PP
+\fItype\fR may be `sine' for sine sweeps or tones, or `delta' for a delta function
+(impulse). `sine' accepts the following arguments:
+.TP
+\fBfreq\fR=\fIf0\fR[\fBk\fR][-\fIf1\fR[\fBk\fR]]
+Frequency. If \fIlen\fR is set and \fIf1\fR is given, an exponential sine sweep
+is generated.
+.PP
+The arguments for `delta' are:
+.TP
+\fBoffset\fR=\fItime\fR[\fBs\fR|\fBm\fR|\fBS\fR]
+Offset in seconds, miliseconds or samples.
+.PP
+Example:
+.EX
+	$ dsp -t sgen -c 2 sine@0:freq=500-1k/sine@1:freq=300-800+2 gain -10
+.EE
 .SH EFFECTS
 .SS Full effects list
 .TP
@@ -148,9 +171,13 @@ is given.
 Multiplies each sample by \fImultiplier\fR. Ignores the channel selector when
 the \fIchannel\fR argument is given.
 .TP
+\fBadd\fR [\fIchannel\fR] \fIvalue\fR
+Applies a DC shift. Ignores the channel selector when the \fIchannel\fR
+argument is given.
+.TP
 \fBcrossfeed\fR \fIf0\fR[\fBk\fR] \fIseparation\fR
 Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
-crossfeed. Ignores the channel selector. Input must be 2 channels.
+crossfeed.
 .TP
 \fBremix\fR \fIchannel_selector\fR|. ...
 Select and mix input channels into output channels. Each channel selector
@@ -165,6 +192,12 @@ and 3 into output channel 1.
 	remix -
 .EE
 mixes all input channels into a single output channel.
+.TP
+\fBst2ms\fR
+Convert stereo to mid/side.
+.TP
+\fBms2st\fR
+Convert mid/side to stereo.
 .TP
 \fBdelay\fR \fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
 Delay line. The unit for the \fIdelay\fR argument depends on the suffix used:
@@ -185,20 +218,6 @@ Latency is equal to \fImin_part_len\fR (64 samples by default).
 \fBnoise\fR \fIlevel\fR
 Add TPDF noise. The \fIlevel\fR argument specifies the peak level of the noise
 (dBFS).
-.TP
-\fBcompress\fR \fIthresh\fR \fIratio\fR \fIattack\fR \fIrelease\fR
-Compress or expand the dynamic range. This effect peak-sensing and input
-channels are linked. If the ratio is in (1,inf), the dynamic range will be
-compressed. If the ratio is in (0,1), the dynamic range will be expanded.
-Attack refers to decreases in gain and release refers to increases in gain.
-.TP
-\fBreverb\fR [\fB-w\fR] [\fIreverberance\fR [\fIhf_damping\fR [\fIroom_scale\fR [\fIstereo_depth\fR [\fIpre_delay\fR [\fIwet_gain\fR]]]]]]
-Add reverberation using the freeverb algorithm. Effect ported from libSoX.
-\fIreverberance\fR, \fIhf_damping\fR, \fIroom_scale\fR, and \fIstereo_depth\fR are in
-percent. \fIpre_delay\fR is in seconds.
-.TP
-\fBg2reverb\fR [\fB-w\fR] [\fIroom_size\fR [\fIreverb_time\fR [\fIinput_bandwidth\fR [\fIdamping\fR [\fIdry_level\fR [\fIreflection_level\fR [\fItail_level\fR]]]]]]]
-Add reverberation using Fons Adriaensen's g2reverb algorithm.
 .TP
 \fBladspa_host\fR \fImodule_path\fR \fIplugin_label\fR [\fIcontrol\fR ...]
 Apply a LADSPA plugin. Supports any number of input/output ports (with
@@ -376,8 +395,4 @@ No support for metadata.
 .PP
 Some effects do not support plotting.
 .SH LICENSE
-This software is released under the ISC license, except for the \fBreverb\fR
-effect, which is under the LGPLv2.1 license (copyright
-robs@users.sourceforge.net), and the \fBg2reverb\fR effect, which is under the
-GPLv2 license (copyright Fons Adriaensen <fons@linuxaudio.org>). See the
-LICENSE files for more details.
+This software is released under the ISC license.

@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
-#include <libavutil/opt.h>
+#include <libavutil/mathematics.h>
 #include "ffmpeg.h"
 #include "sampleconv.h"
 
@@ -94,6 +94,7 @@ ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 				av_frame_unref(state->frame);
 			state->got_frame = 0;
 			state->frame_pos = 0;
+			retry:
 			if ((r = avcodec_receive_frame(state->cc, state->frame)) < 0) {
 				switch (r) {
 				case AVERROR_EOF:
@@ -103,7 +104,7 @@ ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 					skip_packet:
 					if (av_read_frame(state->container, &packet) < 0) {
 						avcodec_send_packet(state->cc, NULL);  /* send flush packet */
-						continue;
+						goto retry;
 					}
 					if (packet.stream_index != state->stream_index) {
 						av_packet_unref(&packet);
@@ -144,19 +145,25 @@ ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
 {
 	AVStream *st;
 	int64_t timestamp;
+	int seek_flags = 0;
 	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
+	if (c->frames == -1)
+		return -1;
 	if (pos < 0)
 		pos = 0;
 	else if (pos >= c->frames)
 		pos = c->frames - 1;
 	st = state->container->streams[state->stream_index];
-	timestamp = pos * st->time_base.den / st->time_base.num / c->fs;
-	if (av_seek_frame(state->container, state->stream_index, timestamp, AVSEEK_FLAG_FRAME) < 0)
+	timestamp = av_rescale(pos, st->time_base.den, st->time_base.num) / c->fs;
+	if (timestamp < st->cur_dts)
+		seek_flags |= AVSEEK_FLAG_BACKWARD;
+	if (av_seek_frame(state->container, state->stream_index, timestamp, seek_flags) < 0)
 		return -1;
 	avcodec_flush_buffers(state->cc);
 	if (state->got_frame)
 		av_frame_unref(state->frame);
 	state->got_frame = 0;
+	pos = av_rescale(st->cur_dts, st->time_base.num * c->fs, st->time_base.den);
 	return pos;
 }
 
@@ -179,7 +186,7 @@ void ffmpeg_destroy(struct codec *c)
 {
 	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
 	av_frame_free(&state->frame);
-	avcodec_close(state->cc);
+	avcodec_free_context(&state->cc);
 	avformat_close_input(&state->container);
 	free(state);
 	free((char *) c->type);
@@ -296,7 +303,12 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 		LOG(LL_ERROR, "%s: ffmpeg: error: unhandled sample format\n", dsp_globals.prog_name);
 		goto fail;
 	}
-	c->frames = st->duration * st->time_base.num * c->fs / st->time_base.den;
+	if (st->duration != AV_NOPTS_VALUE)
+		c->frames = av_rescale(st->duration, st->time_base.num * c->fs, st->time_base.den);
+	else if (state->container->duration != AV_NOPTS_VALUE)
+		c->frames = av_rescale(state->container->duration, c->fs, AV_TIME_BASE);
+	else
+		c->frames = -1;
 	c->read = ffmpeg_read;
 	c->write = ffmpeg_write;
 	c->seek = ffmpeg_seek;

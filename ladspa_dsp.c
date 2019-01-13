@@ -42,13 +42,6 @@ static int n_configs = 0;
 static struct ladspa_dsp_config *configs = NULL;
 static LADSPA_Descriptor *descriptors = NULL;
 
-static char * isolate(char *s, char c)
-{
-	while (*s && *s != c) ++s;
-	if (*s != '\0') *s++ = '\0';
-	return s;
-}
-
 static void init_config(struct ladspa_dsp_config *config, const char *file_name, const char *dir_path)
 {
 	memset(config, 0, sizeof(struct ladspa_dsp_config));
@@ -259,7 +252,7 @@ static void run_dsp(LADSPA_Handle inst, unsigned long s)
 		for (k = 0; k < d->input_channels; ++k)
 			d->buf1[j++] = (sample_t) d->ports[k][i];
 
-	obuf = run_effects_chain(&d->chain, &w, d->buf1, d->buf2);
+	obuf = run_effects_chain(d->chain.head, &w, d->buf1, d->buf2);
 
 	for (i = j = 0; i < s; i++)
 		for (k = d->input_channels; k < d->input_channels + d->output_channels; ++k)

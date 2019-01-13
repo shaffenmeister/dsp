@@ -78,6 +78,7 @@ Flag              | Description
 Type    | Modes | Encodings
 ------- | ----- | -------------------------------------------------------------------------------------
 null    | rw    | sample_t
+sgen    | r     | sample_t
 sndfile | r     | autodetected
 wav     | rw    | s16 u8 s24 s32 float double mu-law a-law ima_adpcm ms_adpcm gsm6.10 g721_32
 aiff    | rw    | s16 s8 u8 s24 s32 float double mu-law a-law ima_adpcm gsm6.10 dwvw_12 dwvw_16 dwvw_24
@@ -126,6 +127,30 @@ can also be used to concatenate inputs with different sample rates and/or
 numbers of channels into a single output file when used with the `resample`
 and/or `remix` effects.
 
+#### Signal generator
+
+The `sgen` input type is a basic (for now, at least) signal generator that can
+generate impulses and exponential sine sweeps. The syntax for the `path`
+argument is as follows:
+
+	[type[@channel_selector][:arg[=value]...]][/type...][+len[s|m|S]]
+
+`type` may be `sine` for sine sweeps or tones, or `delta` for a delta function
+(impulse). `sine` accepts the following arguments:
+
+* `freq=f0[k][-f1[k]]`
+	Frequency. If `len` is set and `f1` is given, an exponential sine sweep
+	is generated.
+
+The arguments for `delta` are:
+
+* `offset=time[s|m|S]`
+	Offset in seconds, miliseconds or samples.
+
+Example:
+
+	$ dsp -t sgen -c 2 sine@0:freq=500-1k/sine@1:freq=300-800+2 gain -10
+
 ### Effects
 
 #### Full effects list
@@ -164,9 +189,12 @@ and/or `remix` effects.
 * `mult [channel] multiplier`  
 	Multiplies each sample by `multiplier`. Ignores the channel selector when
 	the `channel` argument is given.
+* `add [channel] value`  
+	Applies a DC shift. Ignores the channel selector when the `channel`
+	argument is given.
 * `crossfeed f0[k] separation`  
 	Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
-	crossfeed. Ignores the channel selector. Input must be 2 channels.
+	crossfeed.
 * `remix channel_selector|. ...`  
 	Select and mix input channels into output channels. Each channel selector
 	specifies the input channels to be mixed to produce each output channel.
@@ -174,6 +202,10 @@ and/or `remix` effects.
 	channels 0 and 1 into output channel 0, and input channels 2 and 3 into
 	output channel 1. `remix -` mixes all input channels into a single
 	output channel.
+* `st2ms`
+	Convert stereo to mid/side.
+* `ms2st`
+	Convert mid/side to stereo.
 * `delay delay[s|m|S]`  
 	Delay line. The unit for the delay argument depends on the suffix used:
 	`s` is seconds (the default), `m` is milliseconds, and `S` is samples.
@@ -189,17 +221,6 @@ and/or `remix` effects.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	(dBFS).
-* `compress thresh ratio attack release`  
-	Compress or expand the dynamic range. This effect peak-sensing and input
-	channels are linked. If the ratio is in (1,inf), the dynamic range will be
-	compressed. If the ratio is in (0,1), the dynamic range will be expanded.
-	Attack refers to decreases in gain and release refers to increases in gain.
-* `reverb [-w] [reverberance [hf_damping [room_scale [stereo_depth [pre_delay [wet_gain]]]]]]`  
-	Add reverberation using the freeverb algorithm. Effect ported from libSoX.
-	`reverberance`, `hf_damping`, `room_scale`, and `stereo_depth` are in
-	percent. `pre_delay` is in seconds.
-* `g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]`  
-	Add reverberation using Fons Adriaensen's g2reverb algorithm.
 * `ladspa_host module_path plugin_label [control ...]`  
 	Apply a LADSPA plugin. Supports any number of input/output ports (with
 	the exception of zero output ports). Plugins with zero input ports will
@@ -424,8 +445,4 @@ To make `dsp` the default device, append this to `~/.asoundrc`:
 
 ### License
 
-This software is released under the ISC license, except for the `reverb`
-effect, which is under the LGPLv2.1 license (copyright
-robs@users.sourceforge.net), and the `g2reverb` effect, which is under the
-GPLv2 license (copyright Fons Adriaensen \<fons@linuxaudio.org>). See the
-LICENSE files for more details.
+This software is released under the ISC license.

@@ -9,14 +9,12 @@
 #include "gain.h"
 #include "crossfeed.h"
 #include "remix.h"
+#include "st2ms.h"
 #include "delay.h"
 #include "resample.h"
 #include "fir.h"
 #include "zita_convolver.h"
 #include "noise.h"
-#include "compress.h"
-#include "reverb.h"
-#include "g2reverb.h"
 #include "ladspa_host.h"
 #include "stats.h"
 
@@ -37,8 +35,11 @@ static struct effect_info effects[] = {
 	{ "biquad",             "biquad b0 b1 b2 a0 a1 a2",                biquad_effect_init,    BIQUAD_BIQUAD },
 	{ "gain",               "gain [channel] gain",                     gain_effect_init,      GAIN_EFFECT_NUMBER_GAIN },
 	{ "mult",               "mult [channel] multiplier",               gain_effect_init,      GAIN_EFFECT_NUMBER_MULT },
+	{ "add",                "add [channel] value",                     gain_effect_init,      GAIN_EFFECT_NUMBER_ADD },
 	{ "crossfeed",          "crossfeed f0[k] separation",              crossfeed_effect_init, 0 },
 	{ "remix",              "remix channel_selector|. ...",            remix_effect_init,     0 },
+	{ "st2ms",              "st2ms",                                   st2ms_effect_init,     ST2MS_EFFECT_NUMBER_ST2MS },
+	{ "ms2st",              "ms2st",                                   st2ms_effect_init,     ST2MS_EFFECT_NUMBER_MS2ST },
 	{ "delay",              "delay delay[s|m|S]",                      delay_effect_init,     0 },
 #ifdef HAVE_FFTW3
 #ifndef SYMMETRIC_IO
@@ -50,11 +51,6 @@ static struct effect_info effects[] = {
 	{ "zita_convolver",     "zita_convolver [min_part_len [max_part_len]] [~/]impulse_path", zita_convolver_effect_init, 0 },
 #endif
 	{ "noise",              "noise level",                             noise_effect_init,     0 },
-	{ "compress",           "compress thresh ratio attack release",    compress_effect_init,  0 },
-#ifdef ENABLE_GPL_CODE
-	{ "reverb",             "reverb [-w] [reverberance [hf_damping [room_scale [stereo_depth [pre_delay [wet_gain]]]]]]", reverb_effect_init, 0 },
-	{ "g2reverb",           "g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]", g2reverb_effect_init, 0 },
-#endif
 #ifdef ENABLE_LADSPA_HOST
 	{ "ladspa_host",        "ladspa_host module_path plugin_label [control ...]", ladspa_host_effect_init, 0 },
 #endif
@@ -248,10 +244,9 @@ ssize_t get_effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_fra
 	return max_len;
 }
 
-sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+sample_t * run_effects_chain(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
-	struct effect *e = chain->head;
 	while (e != NULL && *frames > 0) {
 		tmp = e->run(e, frames, ibuf, obuf);
 		if (tmp == obuf) {
@@ -332,11 +327,10 @@ sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sam
 {
 	int gcd;
 	ssize_t ftmp = *frames, dframes = -1;
-	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
 	struct effect *e = chain->head;
 	while (e != NULL && dframes == -1) {
 		dframes = ftmp;
-		if (e->drain != NULL) e->drain(e, &dframes, ibuf);
+		if (e->drain != NULL) e->drain(e, &dframes, buf1);
 		else dframes = -1;
 		if (e->ostream.fs != e->istream.fs) {
 			gcd = find_gcd(e->ostream.fs, e->istream.fs);
@@ -345,15 +339,7 @@ sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sam
 		e = e->next;
 	}
 	*frames = dframes;
-	while (e != NULL && *frames > 0) {
-		tmp = e->run(e, frames, ibuf, obuf);
-		if (tmp == obuf) {
-			obuf = ibuf;
-			ibuf = tmp;
-		}
-		e = e->next;
-	}
-	return ibuf;
+	return run_effects_chain(e, frames, buf1, buf2);
 }
 
 void destroy_effects_chain(struct effects_chain *chain)
